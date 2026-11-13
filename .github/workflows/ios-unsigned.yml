@@ -25,7 +25,12 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    # ⚠ 必须是 macos-26，不能退回 macos-15。
+    #   失败记录（2026-11-13）：macos-15 自带 Swift 6.1.0，而 Expo 的 ExpoModulesJSI
+    #   依赖声明了 swift-tools-version 6.2.0 ⇒ xcodebuild 直接报
+    #   `package 'apple' is using Swift tools version 6.2.0 but the installed version is 6.1.0`。
+    #   macos-26 默认 Xcode 26 / Swift 6.2+，正好满足。
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -35,11 +40,13 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Swift 版本也打出来 —— 再出同类问题时，一眼能看出是不是工具链又低了。
       - name: 环境信息
         run: |
           node -v
           npm -v
           xcodebuild -version
+          swift --version
           pod --version
 
       - name: 安装 JS 依赖
