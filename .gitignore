@@ -1,0 +1,39 @@
+.qr.html
+tools/link-fix.bat
+.node-path
+
+# 负向验证的临时产物（tools/_neg-*.js 生成）。
+# ⚠ 必须忽略：备份是**源码的副本**，万一混进提交，别人 checkout 出来的
+#   要么是「注入过 bug 的版本」，要么被残留备份误导成「已注入」而拒绝再跑。
+# ⚠ 用 `*xxx*` 而不是 `*xxx.*`：两头通配能覆盖「下标在前」和「下标在后」两种写法。
+#   三个脚本**现在**已统一成 `foo.js.nv-backup.<i>` / `foo.js.nvcb-backup.<i>`，
+#   但写宽一点 —— 将来谁再改命名时，不会静默漏掉（漏掉 = 被改坏的源码混进提交）。
+*.nv-backup*
+*.nvcb-backup*
+.nv-state.json
+.nv-cb-state.json
+.neg-screens-state.json
+.neg-screens-baseline.json
+.nv-snapshot/
+.neg-tmp/
+# ⚠ 负向验证的「备份暂存区」：restore 用 renameSync 把备份挪到这里（不走删除路径，
+#   否则删除对下一进程不可见 ⇒ 驱动误判「没还原干净」⇒ 整轮卡在第 1 例）。
+#   里面全是源文件的旧副本，绝不能进版本库。
+.neg-stash/
+
+# ---- 打包 / CI 用（2026-11-13 加，iOS 云构建）----
+# node_modules 必须忽略：15k 文件，且 CI 里用 npm ci 自己装
+node_modules/
+# Expo 的本地缓存与生成物
+.expo/
+dist/
+web-build/
+# prebuild 生成的原生工程：**故意不入库**。
+# CI 在 macOS 上现生成（Windows 上生成不了，Expo 直接拒绝）；
+# 入库反而会让 CI 用到一份过期的原生工程，改 app.json 不生效。
+ios/
+android/
+# 构建产物
+build/
+*.ipa
+*.dSYM.zip

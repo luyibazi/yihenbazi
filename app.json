@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "八字排盘",
+    "slug": "paipan",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.paipan.app"
+    },
+    "android": {
+      "package": "com.paipan.app",
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "extra": {
+      "apiBase": "https://luyi-d6gyted3jca56a566.api.tcloudbasegateway.com",
+      "cloudbaseEnv": "luyi-d6gyted3jca56a566"
+    }
+  }
+}

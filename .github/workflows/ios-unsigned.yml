@@ -1,0 +1,106 @@
+# 在 GitHub 的 macOS 机器上构建 **未签名** 的 iOS .ipa
+#
+# 为什么要在云端构建：
+#   · iOS 只能由 macOS 上的 Xcode 编译（Windows 上 `expo prebuild -p ios` 会直接拒绝）；
+#   · 本机没有付费 Apple 开发者账号，所以这里**不做签名**，产物是裸的 .ipa；
+#   · 签名交给手机端工具（Sideloadly / AltStore）用**免费 Apple ID** 现场签，7 天过期重签。
+#
+# 用法：仓库 → Actions → 左边选 build-ios-unsigned → Run workflow → 跑完在页面底部下载 artifact。
+#
+# 注意：
+#   · 免费额度：私有仓库每月 2000 分钟，但 macOS 机器 ×10 计费 ⇒ 实际约 200 分钟，
+#     一次构建约 15~25 分钟 ⇒ 每月 8~12 次。别乱点。
+#   · 包里的服务器地址由 `src/core/storeMode.js` 的 LOCAL_URL 决定（编进包里的常量），
+#     换隧道地址要改那一行后重新跑一次。
+
+name: build-ios-unsigned
+
+on:
+  workflow_dispatch:
+    inputs:
+      local_url:
+        description: '后端地址（留空 = 用仓库里 storeMode.js 现有的值）。填隧道地址，如 https://xxx.trycloudflare.com'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 环境信息
+        run: |
+          node -v
+          npm -v
+          xcodebuild -version
+          pod --version
+
+      - name: 安装 JS 依赖
+        run: npm ci
+
+      # 只在启动构建时填了地址才改；不改源码文件，免得和本地那份产生 diff。
+      - name: 注入服务器地址
+        if: ${{ inputs.local_url != '' }}
+        run: |
+          set -euo pipefail
+          sed -i '' "s|const LOCAL_URL = '.*';|const LOCAL_URL = '${{ inputs.local_url }}';|" src/core/storeMode.js
+          grep -n "const LOCAL_URL" src/core/storeMode.js
+
+      - name: 生成原生工程（prebuild）
+        env:
+          EXPO_NO_TELEMETRY: '1'
+          CI: '1'
+        run: npx expo prebuild -p ios --no-install
+
+      - name: CocoaPods
+        run: |
+          set -euo pipefail
+          cd ios
+          pod install --repo-update
+
+      - name: 编译（关闭签名）
+        run: |
+          set -euo pipefail
+          WS=$(ls -d ios/*.xcworkspace | head -1)
+          SCHEME=$(basename "$WS" .xcworkspace)
+          echo "workspace=$WS"
+          echo "scheme=$SCHEME"
+          xcodebuild \
+            -workspace "$WS" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            EXPANDED_CODE_SIGN_IDENTITY="" \
+            ONLY_ACTIVE_ARCH=NO
+
+      - name: 打成 .ipa
+        run: |
+          set -euo pipefail
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)
+          if [ -z "$APP" ]; then echo "没找到 .app，编译产物目录："; find build/Build/Products -maxdepth 2 -type d; exit 1; fi
+          echo "app=$APP"
+          rm -rf Payload
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry paipan-unsigned.ipa Payload
+          ls -lh paipan-unsigned.ipa
+          unzip -l paipan-unsigned.ipa | head -5
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: paipan-ios-unsigned
+          path: paipan-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
