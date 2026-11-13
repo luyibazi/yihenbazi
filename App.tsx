@@ -44,6 +44,8 @@ const auth: any = require('./src/core/auth.js');
 const presence: any = require('./src/core/presence.js');
 /** ⚠ 冷启动必须先把持久化的凭证读进内存 —— 见下面 booted 闸门的注释 */
 const storage: any = require('./src/platform/storage.js');
+/** 服务器地址的本地覆盖值（设置页填的），也要和凭证一起在冷启动读回来 */
+const serverAddr: any = require('./src/core/serverAddr.js');
 /** 登录页的标题与文案在 content.js 里（可断言，且只写一份） */
 const loginContent: any = require('./src/screens/login/content.js');
 
@@ -105,7 +107,15 @@ export default function App() {
   const [booted, setBooted] = useState(false);
   useEffect(() => {
     let alive = true;
-    storage.loadFromDisk().then(() => { if (alive) setBooted(true); });
+    storage.loadFromDisk().then(() => {
+      /*
+       * ⚠ 地址覆盖值也必须在这里读回来（它在同一份盘里）：晚一步的话，
+       *   冷启动开头那几秒用的是包里的默认地址 —— 用户改过地址的场景下，
+       *   这几秒会去连一台不该连的服务器（报错文案都指向错的地方）。
+       */
+      serverAddr.init();
+      if (alive) setBooted(true);
+    });
     return () => { alive = false; };
   }, []);
 

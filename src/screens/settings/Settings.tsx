@@ -33,7 +33,7 @@
  *   顺序不能换，理由见 onLogout。这一句是尽力而为的，失败不拦着用户登出。
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import Screen from '../Screen';
 import { useRpx } from '../../theme/rpx';
@@ -43,10 +43,19 @@ const content: any = require('./content.js');
 const auth: any = require('../../core/auth.js');
 /** 退出登录时要顺口告诉服务端一声「我走了」（后台立刻显示离线），见 onLogout */
 const presence: any = require('../../core/presence.js');
+/** 服务器地址（运行时覆盖值）—— 只对自建后端有意义，见下面 serverRow */
+const serverAddr: any = require('../../core/serverAddr.js');
+const storeMode: any = require('../../core/storeMode.js');
 
 /** 设置卡里一行的三种取值风格 */
 type RowTone = 'chevron' | 'dark' | 'gold';
 type Row = { id: string; label: string; value: string; tone: RowTone; onPress?: () => void };
+
+/** 行里只显示「主机 + 端口」，去掉 scheme —— 一行放不下整条 URL，而 scheme 千篇一律 */
+function prettyUrl(u: string): string {
+  const s = String(u || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  return s || '未设置';
+}
 
 /**
  * **本页自绘的确认框**内容（`null` = 不显示）。
@@ -90,6 +99,20 @@ export default function Settings({
    *   —— `ask === null` 就是不显示。
    */
   const [ask, setAsk] = useState<Ask | null>(null);
+
+  /**
+   * 服务器地址编辑框（`null` = 不显示，`string` = 正在编辑的草稿）。
+   *
+   * ⚠ 草稿与「当前生效值」是**两份**：输入过程中不能改生效值，
+   *   否则敲到一半地址就变了，中间那几个字符会让所有请求打到不存在的域名上。
+   */
+  const [addrDraft, setAddrDraft] = useState<string | null>(null);
+
+  /** 当前生效的服务器地址（每次渲染现取：它活在模块内存里，不是 React state；保存时靠 setAddrDraft 触发重渲染） */
+  const effectiveUrl = serverAddr.current();
+  const addrChanged = serverAddr.isOverridden();
+  /** 草稿非空且没写协议头 ⇒ 明显是错的，先拦下来（空 = 恢复默认，合法） */
+  const addrBad = addrDraft !== null && !!addrDraft.trim() && !/^https?:\/\//i.test(addrDraft.trim());
 
   /**
    * 当前账号。
@@ -141,11 +164,38 @@ export default function Settings({
     }
     /* ⚠ 2026-10-21 起这里只有账号那一行 + 版本行：「清除本机缓存」「开源组件」
        「无限滚动（仿制）」全部按用户要求删除（见文件头）。别再往里加。 */
+    /*
+     * 服务器地址 —— 2026-11-13 加。
+     * ⚠ 为什么这行不属于「多余」那批（2026-10-21 删掉的那些说明卡）：
+     *   它不是解释文案，是**唯一的入口** —— 地址从编译期常量挪到了运行时，
+     *   手机上不填就只能用包里那个默认值（公网隧道地址每次重启都会变）。
+     * ⚠ 只在自建后端（local）下显示：别的 MODE 走的是另一套地址体系。
+     */
+    if (storeMode.MODE === 'local') {
+      out.push({
+        id: 'server',
+        label: content.SERVER_LABEL,
+        value: prettyUrl(effectiveUrl) + (addrChanged ? '（已改）' : ''),
+        tone: 'chevron',
+        onPress: () => setAddrDraft(effectiveUrl),
+      });
+    }
     content.INFO_ROWS.forEach((r: any) => {
       out.push({ id: r.id, label: r.label, value: r.value, tone: 'dark' });
     });
     return out;
-  }, [account, onLogout, onOpenLogin]);
+  }, [account, onLogout, onOpenLogin, effectiveUrl, addrChanged]);
+
+  /** 保存地址：**先**推给 storeMode（立刻生效）→ 落盘 → 通知上层重新拉数据 */
+  const onSaveAddr = useCallback(() => {
+    const v = addrDraft == null ? '' : addrDraft;
+    if (v.trim() && !/^https?:\/\//i.test(v.trim())) return;   // 非法输入不许保存（按钮已置灰）
+    serverAddr.save(v);
+    setAddrDraft(null);
+    /* ⚠ 换服务器 = 换了一个数据源（连登录态都是别处签的）：必须让各 tab 重新拉一遍，
+       否则记录页还挂着上一台服务器的列表。onSessionChanged 就是那个信号。 */
+    onSessionChanged();
+  }, [addrDraft, onSessionChanged]);
 
   const s = useMemo(() => StyleSheet.create({
     card: {
@@ -220,6 +270,20 @@ export default function Settings({
     askBtn: { paddingVertical: rpx(12), paddingLeft: rpx(36) },
     askBtnText: { fontSize: rpx(28), color: COLORS.textMuted },
     askOkText: { color: COLORS.gold, fontWeight: FONT_WEIGHTS.semibold },
+    /* ---- 服务器地址输入框 ---- */
+    addrInput: {
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: COLORS.borderLight,
+      borderRadius: rpx(8),
+      paddingHorizontal: rpx(20),
+      paddingVertical: rpx(20),
+      fontSize: rpx(26),
+      color: COLORS.text,
+      marginBottom: rpx(14),
+    },
+    addrInputBad: { borderColor: COLORS.gold },
+    addrNow: { fontSize: rpx(22), color: COLORS.textGhost, marginBottom: rpx(20) },
+    addrErr: { fontSize: rpx(22), color: COLORS.gold, marginTop: rpx(-6), marginBottom: rpx(16) },
   }), [rpx]);
 
   const toneStyle = (tone: RowTone) => (
@@ -238,7 +302,7 @@ export default function Settings({
             const body = (
               <>
                 <Text style={s.rowLabel}>{row.label}</Text>
-                <Text style={toneStyle(row.tone)}>{row.value}</Text>
+                <Text style={toneStyle(row.tone)} numberOfLines={1}>{row.value}</Text>
               </>
             );
             // 可点的行用 Pressable，只读行用 View —— 只读行不该有按压反馈
@@ -273,6 +337,39 @@ export default function Settings({
                 }}
               >
                 <Text style={[s.askBtnText, s.askOkText]}>{ask.ok}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {/* 服务器地址编辑（与确认框同一套遮罩 / 卡片样式，见 `Ask` 的注释） */}
+      {addrDraft !== null ? (
+        <View style={s.askMask}>
+          <View style={s.askCard}>
+            <Text style={s.askTitle}>{content.SERVER_TITLE}</Text>
+            <Text style={s.askBody}>{content.SERVER_BODY}</Text>
+            <TextInput
+              value={addrDraft}
+              onChangeText={setAddrDraft}
+              placeholder={content.SERVER_PHONE}
+              placeholderTextColor={COLORS.textGhost}
+              style={[s.addrInput, addrBad ? s.addrInputBad : null]}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              inputMode="url"
+              returnKeyType="done"
+              onSubmitEditing={onSaveAddr}
+            />
+            <Text style={s.addrNow} numberOfLines={1}>当前：{effectiveUrl}</Text>
+            {addrBad ? <Text style={s.addrErr}>地址要以 http:// 或 https:// 开头</Text> : null}
+            <View style={s.askRow}>
+              <Pressable style={s.askBtn} onPress={() => setAddrDraft(null)}>
+                <Text style={s.askBtnText}>取消</Text>
+              </Pressable>
+              <Pressable style={s.askBtn} onPress={onSaveAddr} disabled={addrBad}>
+                <Text style={[s.askBtnText, addrBad ? null : s.askOkText]}>保存</Text>
               </Pressable>
             </View>
           </View>

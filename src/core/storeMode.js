@@ -43,7 +43,49 @@ const MODE = 'local';
  * ⚠ 真正的连接参数在 core/localsdk.js 的 CONFIG.base ——
  *   那层是最底层，不该反过来依赖这份业务配置。这里只给设置页一个状态位/展示用。
  */
-const LOCAL_URL = 'https://provided-tribal-saver-klein.trycloudflare.com';
+const LOCAL_URL = 'http://192.168.0.103:4000';
+
+/**
+ * 运行时覆盖的服务器地址 —— 设置页里填的那一条（存本机）。
+ * 空串 = 用上面的 LOCAL_URL。
+ *
+ * ============ 为什么需要这个（2026-11-13 用户要「装到 iPhone 上试」）============
+ * `LOCAL_URL` 是**编译期常量**：改一次就得重新打一次包（iOS 还要过云端 macOS 构建，
+ * 一次二十来分钟）。而公网穿透的临时域名**每次启动都变** ——
+ * 两个事实叠在一起就是「每开一次服务、重打一次包」，没法用。
+ * ⇒ 把地址挪到运行时：包里只带一个默认值，真实地址在手机里填/改，改完立刻生效。
+ *
+ * ⚠⚠ 这里**只放内存**，绝不 import AsyncStorage —— 这个文件被一堆纯 Node 测试直接
+ *   require，一旦引入 RN 原生模块，那些测试当场全红。落盘在 core/serverAddr.js。
+ */
+let overrideUrl = '';
+
+/**
+ * 规范化用户输入的地址：去首尾空格、去末尾斜杠；
+ * **不是 http(s) 就返回空串**（= 视为没填，别把一句乱码当成服务器地址去连）。
+ */
+function normalizeUrl(raw) {
+  const s = String(raw == null ? '' : raw).trim().replace(/\/+$/, '');
+  if (!s) return '';
+  if (!/^https?:\/\/[^\s/]+/i.test(s)) return '';
+  return s;
+}
+
+/** 当前**生效**的本地后端地址（覆盖值优先） */
+function localUrl() {
+  return overrideUrl || LOCAL_URL;
+}
+
+/** 设置覆盖值（传空串 = 恢复用 LOCAL_URL），返回落定后的值 */
+function setLocalUrlOverride(raw) {
+  overrideUrl = normalizeUrl(raw);
+  return overrideUrl;
+}
+
+/** 当前是否有覆盖（设置页要显示「已改为…」） */
+function hasLocalUrlOverride() {
+  return !!overrideUrl;
+}
 
 /** 本地后端是否配置好了（给设置页显示状态用，**不要**用它做业务判断） */
 const LOCAL_READY = !!LOCAL_URL;
@@ -222,6 +264,10 @@ module.exports = {
   CLOUDBASE_READY: CLOUDBASE_READY,
   LOCAL_URL: LOCAL_URL,
   LOCAL_READY: LOCAL_READY,
+  /** 当前生效的地址（LOCAL_URL 或设置页填的覆盖值）—— localsdk 用它 */
+  localUrl: localUrl,
+  setLocalUrlOverride: setLocalUrlOverride,
+  hasLocalUrlOverride: hasLocalUrlOverride,
   ready: ready,
   isFileLevel: isFileLevel,
   supportsFilter: supportsFilter,

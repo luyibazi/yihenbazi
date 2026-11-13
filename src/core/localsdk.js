@@ -45,7 +45,9 @@ const CONFIG = {
    */
   get base() {
     try {
-      return require('./storeMode.js').LOCAL_URL || 'http://127.0.0.1:4000';
+      /* ⚠ 取的是 `localUrl()`，不是 `LOCAL_URL` —— 后者只是**默认值**，
+         设置页填的覆盖值在 storeMode 内部优先（2026-11-13，见那边的注释）。 */
+      return require('./storeMode.js').localUrl() || 'http://127.0.0.1:4000';
     } catch (err) {
       return 'http://127.0.0.1:4000';
     }
@@ -147,6 +149,19 @@ function errText(body, status, fallback) {
  * 把「同一 WiFi / 防火墙 / 服务是否启动」写出来，他大概率能自己解决。
  */
 function networkHint(aborted) {
+  /*
+   * ⚠ 2026-11-13：地址可能不再是局域网 IP —— 设置页可以填公网隧道地址
+   *   （`https://xxx.trycloudflare.com`）。那种情况下让用户去查「同一个 WiFi」
+   *   是把人往错方向指：他和电脑本来就不在一个网里。
+   */
+  let base = '';
+  try { base = require('./storeMode.js').localUrl(); } catch (err) { base = ''; }
+  const isLan = /^https?:\/\/(127\.0\.0\.1|localhost|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(base);
+  if (!isLan) {
+    return aborted
+      ? '请求超时了。请确认电脑上的后端服务还在运行、设置里的服务器地址没有过期。'
+      : '连不上服务器。请检查：①手机能不能上网；②设置里的服务器地址是否还有效（隧道地址每次重启都会变）；③电脑上的后端服务是否在运行。';
+  }
   if (aborted) return '请求超时了。请确认手机和电脑在同一个 WiFi，且后端服务还在运行。';
   return '连不上服务器。请检查：①手机和电脑是否在同一个 WiFi；②电脑的防火墙是否放行了 4000 端口；③电脑上后端服务是否已启动。';
 }

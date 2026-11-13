@@ -515,12 +515,25 @@ function run() {
     ok('⚠ 本地版不做英文黑话映射表（服务端本来就是中文）',
       !/malformed|invalid_argument/.test(localsdk.errText({ error: '服务器内部错误' }, 500, null)));
 
-    /* 网络提示：必须把三个自查步骤讲出来 */
+    /*
+     * 网络提示：**随地址类型分两套**（2026-11-13）。
+     * ⚠ 这里必须自己控地址，不能依赖 storeMode 的默认值 ——
+     *   默认值可能是局域网 IP，也可能是公网隧道地址（用户改过之后），
+     *   断言会跟着「上一次测试留下的状态」飘。
+     */
+    storeMode.setLocalUrlOverride('http://192.168.1.5:4000');
     const nh = localsdk.networkHint(false);
-    ok('网络失败提示里点名「同一个 WiFi」', /WiFi|wifi/.test(nh), nh);
-    ok('网络失败提示里点名「防火墙」', /防火墙/.test(nh), nh);
-    ok('网络失败提示里点名「服务是否启动」', /启动/.test(nh), nh);
+    ok('局域网地址：提示点名「同一个 WiFi」', /WiFi|wifi/.test(nh), nh);
+    ok('局域网地址：提示点名「防火墙」', /防火墙/.test(nh), nh);
+    ok('局域网地址：提示点名「服务是否启动」', /启动/.test(nh), nh);
     ok('超时提示与断网提示是两句不同的话', localsdk.networkHint(true) !== localsdk.networkHint(false));
+    /* 公网地址（https 隧道）下**不能**再让人去查 WiFi —— 他本来就不跟电脑在一个网里 */
+    storeMode.setLocalUrlOverride('https://abc-def.trycloudflare.com');
+    const nh2 = localsdk.networkHint(false);
+    ok('⚠ 公网地址：提示不再提「同一个 WiFi」', !/WiFi|wifi/.test(nh2), nh2);
+    ok('公网地址：提示点名「服务器地址」与「上网」', /服务器地址/.test(nh2) && /上网/.test(nh2), nh2);
+    ok('公网地址：超时提示也不提 WiFi', !/WiFi|wifi/.test(localsdk.networkHint(true)));
+    storeMode.setLocalUrlOverride('');
   }
 
   /* ================================================================
@@ -716,17 +729,21 @@ function run() {
 
     /* ⚠ 断网：必须回 ok:false + NETWORK，且文案带三个自查步骤 */
     steps.push(function () {
+      /* ⚠ 文案分两套（局域网 / 公网），这里要验的是局域网那套 ⇒ 先固定成局域网地址 */
+      storeMode.setLocalUrlOverride('http://192.168.1.5:4000');
       localsdk._setFetch(function () { return Promise.reject(new TypeError('Network request failed')); });
       return localsdk.request('/records', {}).then(function (r) {
         eq('⚠ 断网 → ok:false（**永不 reject**）', r.ok, false);
         eq('  └ 码是 NETWORK', r.code, 'NETWORK');
         ok('  └ 文案讲清了三个自查步骤', /WiFi/.test(r.error) && /防火墙/.test(r.error));
         eq('  └ status 为 0（不是编一个 500）', r.status, 0);
+        storeMode.setLocalUrlOverride('');   // 收尾：别把地址覆盖漏给后面的用例
       });
     });
 
     /* ⚠ 超时：AbortError → TIMEOUT（与断网分开，用户该做的事不同） */
     steps.push(function () {
+      storeMode.setLocalUrlOverride('http://192.168.1.5:4000');   // 同上：验局域网那套文案
       localsdk._setFetch(function () {
         const e = new Error('aborted');
         e.name = 'AbortError';
@@ -735,6 +752,7 @@ function run() {
       return localsdk.request('/records', {}).then(function (r) {
         eq('⚠ 超时 → 码是 TIMEOUT（与 NETWORK 分开）', r.code, 'TIMEOUT');
         ok('  └ 超时文案提到「同一个 WiFi」与「服务还在运行」', /WiFi/.test(r.error) && /运行/.test(r.error));
+        storeMode.setLocalUrlOverride('');
       });
     });
 
@@ -1462,9 +1480,9 @@ function run() {
     ok('⚠⚠ session.hasRefresh() 在 local 下为 false（现取 MODE，不是加载时定死）',
       /MODE !== 'local'/.test(fs.readFileSync(path.join(CORE, 'session.js'), 'utf8')));
 
-    /* ⚠ 地址只有一份 */
-    ok('⚠⚠ LOCAL_URL 只在 storeMode.js 定义一份（localsdk 用 getter 现取）',
-      /LOCAL_URL/.test(modeText) && /storeMode\.js'\)\.LOCAL_URL/.test(sdkText));
+    /* ⚠ 地址只有一份来源 */
+    ok('⚠⚠ 地址只由 storeMode 的 localUrl() 给出（LOCAL_URL + 运行时覆盖），localsdk 现取不拷贝',
+      /function localUrl\(/.test(modeText) && /storeMode\.js'\)\.localUrl\(\)/.test(sdkText));
     ok('⚠⚠ localsdk.CONFIG.base 是 **getter**（加载时拷贝的话，测试改 storeMode 不生效）',
       /get base\(\)/.test(sdkText));
 
@@ -1474,7 +1492,9 @@ function run() {
     if (urlM) {
       ok('⚠⚠ LOCAL_URL 不是回环地址（手机必须用局域网 IP）',
         !/127\.0\.0\.1|localhost/.test(urlM[1]), urlM[1]);
-      ok('  └ 带端口号', /:\d+/.test(urlM[1]), urlM[1]);
+      /* ⚠ 局域网地址必须带端口；公网 https 隧道地址可以省（443 是默认端口） */
+      ok('  └ 带端口，或是 https 公网地址',
+        /:\d+/.test(urlM[1]) || /^https:\/\//i.test(urlM[1]), urlM[1]);
     }
 
     /* ⚠ 驱动不许自己去读 auth（令牌归 session 一层独占） */
@@ -3220,6 +3240,49 @@ function run() {
 }
 
 /* ================================================================ 执行 */
+
+/* ================================================================
+ * 八、服务器地址的运行时覆盖（2026-11-13）
+ *
+ * 为什么要有这一段：地址从「编译期常量」变成了「常量 + 运行时覆盖」，
+ * 覆盖值存在本机。这条链断了的表现是**很难查**的那种 ——
+ * 「明明改过地址，重启 app 又变回默认」，而日志里干干净净。
+ * ================================================================ */
+{
+  const serverAddr = require(path.join(CORE, 'serverAddr.js'));
+
+  /* --- 规范化：非法输入一律当没填，别把一句乱码当服务器地址去连 --- */
+  storeMode.setLocalUrlOverride('  https://a.example.com/  ');
+  eq('规范化：去首尾空格 / 去末尾斜杠', storeMode.localUrl(), 'https://a.example.com');
+  storeMode.setLocalUrlOverride('a.example.com');
+  eq('⚠ 没写协议头 ⇒ 视为没填（回落默认地址）', storeMode.localUrl(), storeMode.LOCAL_URL);
+  storeMode.setLocalUrlOverride('ftp://a.example.com');
+  eq('⚠ 非 http(s) ⇒ 视为没填', storeMode.localUrl(), storeMode.LOCAL_URL);
+  storeMode.setLocalUrlOverride('');
+
+  /* --- 生效值改了就立刻生效（getter 现取，不是加载时拷贝）--- */
+  storeMode.setLocalUrlOverride('https://b.example.com');
+  eq('⚠ 覆盖值 → localsdk.CONFIG.base 立刻跟着变', localsdk.CONFIG.base, 'https://b.example.com');
+  storeMode.setLocalUrlOverride('');
+  ok('  └ 清掉覆盖值 → 回到默认（这条确保上一条不是自证）',
+    localsdk.CONFIG.base === storeMode.LOCAL_URL, localsdk.CONFIG.base);
+
+  /* --- 落盘 → 冷启动读回来 --- */
+  eq('serverAddr.save() 返回落定值', serverAddr.save('https://c.example.com'), 'https://c.example.com');
+  eq('  └ current() 与之一致', serverAddr.current(), 'https://c.example.com');
+  eq('  └ isOverridden() 为真', serverAddr.isOverridden(), true);
+  storeMode.setLocalUrlOverride('');            // 模拟冷启动：内存是空的
+  eq('  └ 抹掉内存后回到默认（前置条件）', storeMode.localUrl(), storeMode.LOCAL_URL);
+  eq('⚠⚠ 冷启动 init() 从盘里读回覆盖值', serverAddr.init(), 'https://c.example.com');
+  ok('  └ storage 里确实存着那个键', storage.getStorageSync(serverAddr.KEY) === 'https://c.example.com',
+    String(storage.getStorageSync(serverAddr.KEY)));
+  ok('⚠ 键名带 paipan_ 前缀（loadFromDisk 只捞这个前缀，不加就「存进去了读不回来」）',
+    /^paipan_/.test(serverAddr.KEY), serverAddr.KEY);
+
+  /* --- save('') = 恢复默认 --- */
+  eq('save(\'\') 恢复默认', serverAddr.save(''), storeMode.LOCAL_URL);
+  eq('  └ isOverridden() 变回 false', serverAddr.isOverridden(), false);
+}
 
 const groups = run();
 

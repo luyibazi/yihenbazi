@@ -35,6 +35,20 @@ const LOGGED_ACTION = '退出登录';
 const LOGOUT_TITLE = '退出登录';
 const LOGOUT_BODY = '退出后需要重新用账号密码登录才能看到云端记录，云端记录本身不会被删除。';
 
+/* ------------------------------------------------- 服务器地址（2026-11-13） */
+
+/**
+ * 为什么它必须能被改（而不是写死在代码里）：
+ *   地址是**编进包里**的常量，而公网穿透的临时域名每次启动都变 ——
+ *   写死的话「换一次地址 = 重新打一次包」（iOS 还要过云端 macOS 构建，二十来分钟）。
+ *   挪到运行时之后，手机上改一下就好。
+ */
+const SERVER_LABEL = '服务器地址';
+const SERVER_TITLE = '服务器地址';
+const SERVER_BODY = '填后端的完整地址：公网隧道用 https://…（iPhone 只认 https，明文 http 会被系统拦掉），局域网用 http://192.168.x.x:4000。留空 = 恢复默认地址。';
+/** 输入框占位（不预填当前值，避免「看着像已经保存了」） */
+const SERVER_PHONE = 'https://xxx.trycloudflare.com';
+
 module.exports = {
   VERSION: VERSION,
   INFO_ROWS: INFO_ROWS,
@@ -44,5 +58,9 @@ module.exports = {
   LOGIN_ACTION: LOGIN_ACTION,
   LOGGED_ACTION: LOGGED_ACTION,
   LOGOUT_TITLE: LOGOUT_TITLE,
-  LOGOUT_BODY: LOGOUT_BODY
+  LOGOUT_BODY: LOGOUT_BODY,
+  SERVER_LABEL: SERVER_LABEL,
+  SERVER_TITLE: SERVER_TITLE,
+  SERVER_BODY: SERVER_BODY,
+  SERVER_PHONE: SERVER_PHONE
 };

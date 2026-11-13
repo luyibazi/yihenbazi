@@ -3124,6 +3124,15 @@ console.log('\n--- settings/content.js ---');
   ok(/content\.INFO_ROWS\.forEach/.test(settingsSrc), '版本行还在（INFO_ROWS 仍被渲染）');
   ok(/onOpenLogin/.test(settingsSrc) && /onLogout/.test(settingsSrc), '账号区两个入口都还在');
 
+  /*
+   * 服务器地址入口（2026-11-13）—— 它**不是**那批被删掉的说明卡：
+   * 地址改到运行时之后，这是手机上改地址的**唯一**入口，删了就只剩重打包。
+   * ⚠ 断言必须认「有输入框 + 有保存」，只认一个常量名是拦不住误删的。
+   */
+  ok(/content\.SERVER_LABEL/.test(settingsSrc), '⚠ 设置页有「服务器地址」那一行');
+  ok(/<TextInput/.test(settingsSrc) && /serverAddr\.save\(/.test(settingsSrc),
+    '⚠⚠ 服务器地址有输入框且真的调了保存（不是只有一行文案）');
+
   /* 账号那一区的文案：未登录 / 已登录两个入口，以及退出的二次确认 */
   eq(settingsContent.LOGIN_ACTION, '登录', '未登录时那一行显示「登录」');
   eq(settingsContent.LOGGED_ACTION, '退出登录', '已登录时给「退出登录」');
