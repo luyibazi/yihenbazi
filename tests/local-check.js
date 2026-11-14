@@ -3286,6 +3286,53 @@ function run() {
 
 const groups = run();
 
+/*
+ * ================= 第九节：浏览器同源地址（2026-11-14）=================
+ *
+ * 背景：web 版产物现在由后端**同源**托管（`paipan-server/src/lib/webStatic.ts`），
+ * 于是「打开页面的那个地址」本身就是后端地址，手机浏览器不用填任何配置。
+ * 但 `start-web.bat` 起的 Metro 开发服务器是 8081、后端在 4000 —— **不同源**，
+ * 那种情况必须继续用 LOCAL_URL。
+ *
+ * ⚠ 这里的模拟要照 RN 的真实形状来：React Native 里 **`window` 是存在的**
+ *   （就是全局对象），只是没有 `location`。所以「判 typeof window」这种写法
+ *   在原生端会误判 —— 判据必须是 `window.location`。
+ */
+groups.push({
+  name: '浏览器同源地址（pageOrigin）',
+  steps: [
+    function () {
+      const saved = global.window;
+      const setWin = function (loc) { global.window = { location: loc }; };
+      const restore = function () {
+        if (saved === undefined) delete global.window; else global.window = saved;
+        storeMode.setLocalUrlOverride('');
+      };
+      try {
+        storeMode.setLocalUrlOverride('');
+        setWin({ protocol: 'https:', port: '', origin: 'https://x.trycloudflare.com' });
+        eq('浏览器里默认拿页面 origin 当后端', storeMode.localUrl(), 'https://x.trycloudflare.com');
+
+        setWin({ protocol: 'http:', port: '8081', origin: 'http://localhost:8081' });
+        eq('Metro 8081 不同源，退回 LOCAL_URL', storeMode.localUrl(), storeMode.LOCAL_URL);
+
+        setWin({ protocol: 'https:', port: '', origin: 'https://x.trycloudflare.com' });
+        storeMode.setLocalUrlOverride('http://192.168.1.9:4000');
+        eq('设置里填的地址优先于同源', storeMode.localUrl(), 'http://192.168.1.9:4000');
+
+        storeMode.setLocalUrlOverride('');
+        global.window = {};   /* RN 的真实形状：有 window，没有 location */
+        eq('原生端（有 window 无 location）退回 LOCAL_URL', storeMode.localUrl(), storeMode.LOCAL_URL);
+
+        delete global.window;
+        eq('纯 Node 下退回 LOCAL_URL', storeMode.localUrl(), storeMode.LOCAL_URL);
+      } finally {
+        restore();
+      }
+    }
+  ]
+});
+
 let chain = Promise.resolve();
 groups.forEach(function (g) {
   g.steps.forEach(function (fn) {

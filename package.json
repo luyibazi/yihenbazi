@@ -9,6 +9,7 @@
   "scripts": {
     "prestart": "node tools/run.js tools/check-node.js",
     "start": "node tools/run.js node_modules/expo/bin/cli start",
+    "build:web": "node tools/run.js node_modules/expo/bin/cli export -p web --output-dir dist",
     "android": "node tools/run.js node_modules/expo/bin/cli start --android",
     "ios": "node tools/run.js node_modules/expo/bin/cli start --ios",
     "check:node": "node tools/run.js tools/check-node.js",

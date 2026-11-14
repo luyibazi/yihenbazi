@@ -43,7 +43,7 @@ const MODE = 'local';
  * ⚠ 真正的连接参数在 core/localsdk.js 的 CONFIG.base ——
  *   那层是最底层，不该反过来依赖这份业务配置。这里只给设置页一个状态位/展示用。
  */
-const LOCAL_URL = 'http://192.168.0.103:4000';
+const LOCAL_URL = 'https://cir-whom-extract-competition.trycloudflare.com';
 
 /**
  * 运行时覆盖的服务器地址 —— 设置页里填的那一条（存本机）。
@@ -71,9 +71,37 @@ function normalizeUrl(raw) {
   return s;
 }
 
-/** 当前**生效**的本地后端地址（覆盖值优先） */
+/**
+ * 浏览器里**用页面自己的 origin** 当后端地址。
+ *
+ * ============ 为什么需要这条（2026-11-14 用户要「web 版直接网页打开」）============
+ * 后端现在把 web 静态产物一起托管（见 `paipan-server/src/lib/webStatic.ts`），
+ * 所以「打开页面的那个地址」本身就是一个能用的后端地址 —— 同源，连 CORS 都不发。
+ * 于是手机浏览器打开隧道地址就能用，**不需要在任何地方填地址**。
+ *
+ * ⚠⚠ 但 Metro 开发服务器（`start-web.bat` 起的 8081）不行：
+ *   页面在 8081，后端在 4000，**不同源**。那种情况下必须继续用 LOCAL_URL，
+ *   否则网页版开发会去请求 `localhost:8081/auth/signin`，报一个莫名其妙的 404。
+ *   判据就取端口号 —— 8081 是 start-web.bat 里写死的那个（同一处改了就一起改）。
+ *
+ * ⚠ React Native 里 `window` **是存在的**（全局对象），所以不能只判 `typeof window`；
+ *   必须再判 `window.location` —— 原生端没有 location，会安全地走到下一个分支。
+ */
+function pageOrigin() {
+  try {
+    if (typeof window === 'undefined' || !window.location) return '';
+    const loc = window.location;
+    if (loc.protocol !== 'http:' && loc.protocol !== 'https:') return '';
+    if (loc.port === '8081') return '';        // Metro 开发服务器：不同源，走 LOCAL_URL
+    return loc.origin || '';
+  } catch (err) {
+    return '';
+  }
+}
+
+/** 当前**生效**的本地后端地址（设置覆盖值 > 浏览器同源 > LOCAL_URL） */
 function localUrl() {
-  return overrideUrl || LOCAL_URL;
+  return overrideUrl || pageOrigin() || LOCAL_URL;
 }
 
 /** 设置覆盖值（传空串 = 恢复用 LOCAL_URL），返回落定后的值 */
