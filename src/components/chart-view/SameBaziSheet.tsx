@@ -99,9 +99,7 @@ export default function SameBaziSheet({
               <View style={s.group}>
                 <View style={s.groupHead}>
                   <Text style={s.groupTitle}>记录</Text>
-                  <Text style={s.groupCount}>
-                    {rec.ok ? rec.total + ' 条' : '读不到'}
-                  </Text>
+                  <Text style={s.groupCount}>{groupCountText(rec, '条')}</Text>
                 </View>
                 {rec.ok && rec.items.length === 0 ? <Text style={s.none}>没有</Text> : null}
                 {!rec.ok ? <Text style={s.err}>{rec.error}</Text> : null}
@@ -126,9 +124,7 @@ export default function SameBaziSheet({
               <View style={s.group}>
                 <View style={s.groupHead}>
                   <Text style={s.groupTitle}>学堂书签</Text>
-                  <Text style={s.groupCount}>
-                    {bk.ok ? bk.total + ' 个' : '读不到'}
-                  </Text>
+                  <Text style={s.groupCount}>{groupCountText(bk, '个')}</Text>
                 </View>
                 {bk.ok && bk.items.length === 0 ? <Text style={s.none}>没有</Text> : null}
                 {!bk.ok ? <Text style={s.err}>{bk.error}</Text> : null}
@@ -161,8 +157,24 @@ export default function SameBaziSheet({
   );
 }
 
-function makeStyles(rpx: (v: number) => number) {
-  return StyleSheet.create({
+/**
+ * 分组标题右侧的计数。
+ *
+ * ⚠⚠ 只取了 LIMIT 条却报总数会**骗人**（「120 条」下面只列了 50 条，
+ *   用户会以为剩下的丢了）。所以「总数 > 实际列出」时把两件事都写出来。
+ *   这与 core/pillarFilter.js 的 countText「带筛选时不许显示分母」是同一条纪律：
+ *   计数只能说自己确实知道的那个数。
+ */
+function groupCountText(g: any, unit: string) {
+  if (!g) return '';
+  if (!g.ok) return '读不到';
+  const total = typeof g.total === 'number' ? g.total : 0;
+  const shown = Array.isArray(g.items) ? g.items.length : 0;
+  if (shown < total) return total + ' ' + unit + ' · 列出前 ' + shown;
+  return total + ' ' + unit;
+}
+
+function makeStyles(rpx: (v: number) => number) {  return StyleSheet.create({
     mask: {
       flex: 1,
       justifyContent: 'flex-end',
