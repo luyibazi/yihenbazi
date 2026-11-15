@@ -454,24 +454,26 @@ export default function ChartView({
             <Text style={styles.headVal}>
               {record?.dateText} {record?.timeText}
             </Text>
+            {/*
+              ★ 2026-11-15 用户：「在定气法平气法切换按钮下面增加一个按钮，名称为 同」，
+                后改为「最好和公历同一排」⇒ 挂在公历行的右端。
+              ⚠ 位置约束：它是这一行的第三个孩子，`headVal` 是 flex:1、它自己 flexShrink:0
+                ⇒ 公历再长也只会让文字折行，不会把按钮挤出去、也不会撑破卡片。
+              ⚠ `marginRight` 那 6rpx 是对齐用的：上面那颗 Switch 被 scaleX(0.72) 缩过，
+                layout 还是 51，视觉只占中间 36.7 ⇒ 右端天然比容器边缘缩进约 7rpx，
+                按钮跟着缩进一点，两行的右端才落在同一条竖线上。
+              ⚠ 高度跟着这一行走（padding 4 + 21×1.15 的行高）—— 它是行内的一颗小胶囊，
+                不是独立的一行，别加 minHeight / marginTop 之类把它撑出去。
+            */}
+            <Pressable
+              style={[styles.sameBtn, sameLoading ? styles.sameBtnOff : null]}
+              onPress={onSamePress}
+              disabled={sameLoading}
+              hitSlop={{ top: 4, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.sameBtnText}>同</Text>
+            </Pressable>
           </View>
-        </View>
-
-        {/*
-          ★ 2026-11-15 用户：「在定气法平气法切换按钮下面增加一个按钮，名称为 同」。
-          ⚠ 右对齐 ⇒ 视觉上正好落在那个开关的正下方（开关在农历那行右端）。
-          ⚠ 只在这个卡片里多占一行，不动 page / card 的左右 padding ——
-            那笔「一屏 11 列」的宽度预算见文件头，动一下整盘就溢出。
-        */}
-        <View style={styles.sameRow}>
-          <Pressable
-            style={[styles.sameBtn, sameLoading ? styles.sameBtnOff : null]}
-            onPress={onSamePress}
-            disabled={sameLoading}
-            hitSlop={10}
-          >
-            <Text style={styles.sameBtnText}>同</Text>
-          </Pressable>
         </View>
       </View>
 
@@ -528,6 +530,9 @@ export default function ChartView({
         loading={sameLoading}
         data={sameData}
         chars={sameChars}
+        /* ⚠ 条件永远来自**定气法**（用户明确要求），所以这里写死「定气法」。
+           平气法那一页看到这张弹层时，这行小字就是「为什么结果和当前这张盘对不上」的答案。 */
+        source="定气法"
         onClose={closeSame}
         onOpenRecord={(rec: any) => {
           setSameOn(false);
@@ -673,29 +678,31 @@ function makeStyles(rpx: (v: number) => number) {
     },
 
     /* ===== 「同」按钮（2026-11-15）=====
-       ⚠ 右对齐 = 视觉上落在「定气法/平气法」开关的正下方（用户要求的相对位置）。
-       ⚠ 尺寸刻意做小（一颗胶囊的高度）：它是这一块里唯一的动作按钮，
-         不能大到抢走姓名的视觉重心。 */
-    sameRow: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      marginTop: rpx(14),
-    },
+       ⚠ 挂在**公历行右端**（用户：「最好和公历同一排」），行内的一颗小胶囊，
+         不是独立的一行 —— 所以这里没有 marginTop / minWidth 那一套「占位」写法。
+       ⚠ 尺寸刻意做小：它旁边是 23rpx 的公历正文，胶囊高度不越过一行的行高，
+         否则整张信息卡会被它顶出一条空白。
+       ⚠ 底色用 goldBgSoft（与姓名旁的标签同一档淡金）：描边单独存在时在纯白卡上
+         太像一段普通文字，加了这层才看得出是「可以点的」。 */
     sameBtn: {
-      minWidth: rpx(74),
-      paddingVertical: rpx(8),
-      paddingHorizontal: rpx(20),
-      borderWidth: rpx(1),
+      flexShrink: 0,
+      minWidth: rpx(52),
+      marginLeft: rpx(12),
+      marginRight: rpx(6),
+      paddingVertical: rpx(4),
+      paddingHorizontal: rpx(14),
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: COLORS.gold,
       borderRadius: rpx(RADII.btn),
+      backgroundColor: COLORS.goldBgSoft,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    /** 检索进行中：置灰（避免连点发出多次请求）。⚠ 只改描边与文字，不改底色 —— 底色一暗就看着像禁用坏了 */
-    sameBtnOff: { borderColor: COLORS.border },
+    /** 检索进行中：描边转灰、底色拿掉（⚠ 文字不动颜色 —— 它还在一行里，改色会跳） */
+    sameBtnOff: { borderColor: COLORS.border, backgroundColor: 'transparent' },
     sameBtnText: {
-      fontSize: rpx(24),
-      lineHeight: rpx(24) * LINE_HEIGHTS.tight,
+      fontSize: rpx(21),
+      lineHeight: rpx(21) * LINE_HEIGHTS.tight,
       color: COLORS.gold,
     },
 

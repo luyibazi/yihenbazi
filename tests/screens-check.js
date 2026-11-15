@@ -5923,6 +5923,23 @@ console.log('\n--- require / import 路径审计 ---');
   ok(/<Text style=\{styles\.sameBtnText\}>同<\/Text>/.test(chart),
     '结果页有「同」按钮（文案就是「同」）');
   ok(chart.indexOf('import SameBaziSheet from') >= 0, 'ChartView 挂上了 SameBaziSheet');
+
+  /* 位置（2026-11-15 用户：「最好和公历同一排」）：
+     ⚠ 判据是**切片**而不是「文件里能不能找到」—— 后者管不住位置：
+       按钮挪到页脚、挪到另一张卡片里，只要还在这个文件里就照样绿。 */
+  function between(src, a, b) {
+    const i = src.indexOf(a);
+    if (i < 0) return '';
+    const j = src.indexOf(b, i + a.length);
+    return j < 0 ? '' : src.slice(i, j);
+  }
+  const gongliRow = between(chart, '>公历</Text>', '</View>');
+  ok(gongliRow.indexOf('styles.sameBtnText') >= 0,
+    '「同」按钮就在公历那一行里（用户：最好和公历同一排）');
+  /* ⚠ 反向：旧写法是单独一行 `sameRow`（右对齐）。留着它渲染出来就是两处按钮/一条空行 */
+  ok(chart.indexOf('sameRow') < 0, '⚠ 不再单占一行（旧的 sameRow 写法已删）');
+  ok(/source="定气法"/.test(chart), '弹层里标注条件取自定气法（切到平气法也说得清为什么结果不同）');
+
   ok(/sameBazi\.find\(state\.pillars\)/.test(chart),
     '检索条件取 state.pillars（定气法那一份）');
   /* ⚠ 反向：有人「顺手」改成平气法就会红 —— 用户明确要求条件永远是定气法 */
@@ -5935,6 +5952,14 @@ console.log('\n--- require / import 路径审计 ---');
   ok(sheet.indexOf('onOpenRecord') >= 0 && sheet.indexOf('onOpenBookmark') >= 0,
     '弹层两条路各自可点');
   ok(sheet.indexOf('<Modal') >= 0, '弹层用 RN Modal（结果页是裸 ScrollView，absolute 遮罩会被裁）');
+  /* 贴底 sheet（2026-11-15 版式优化）：
+     ⚠ 贴底 = 最后一行紧挨屏幕下边缘 ⇒ 必须吃安全区，否则被 Home 横条压住。
+       这一层是**全屏 Modal**，不在 App 根节点那层 paddingBottom: eaten 里，别指望外面兜。 */
+  ok(sheet.indexOf('useSafeAreaInsets') >= 0 && /Math\.max\(insets\.bottom/.test(sheet),
+    '贴底弹层的底部吃安全区（insets.bottom 与 24rpx 取大）');
+  /* ⚠ 书签主标题的四柱：原来是三元里连算三遍 pillarRows，一条书签跑三趟 */
+  ok((sheet.match(/studyModel\.pillarRows\(/g) || []).length === 1,
+    '书签四柱只算一次（别再内联算三遍）');
 
   /* ⚠ 这两条用 indexOf + 距离，而不是正则：JSX 里那串 `={` / `=>` / `(rec: any)`
      写成正则要转义一堆括号花括号，一旦转义错就变成「永远不匹配」的哑断言
