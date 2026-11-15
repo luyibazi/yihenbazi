@@ -32,8 +32,12 @@ import { View, Text, Pressable, StyleSheet, Switch } from 'react-native';
 import * as M from './model';
 import QiDingPage, { makeStyles as makeDingStyles } from './QiDingPage';
 import QiPingPage, { makeStyles as makePingStyles } from './QiPingPage';
+import SameBaziSheet from './SameBaziSheet';
 import { COLORS, SIZES, RADII, LINE_HEIGHTS, FONT_WEIGHTS } from '../../theme/tokens';
 import { useRpx } from '../../theme/rpx';
+
+/* ⚠ 用 require 而不是 import：core/ 是 CommonJS，TS 的 import 互操作对它不安全 */
+const sameBazi: any = require('../../core/sameBazi.js');
 
 export type ChartViewProps = {
   /** 排盘记录；传 null 或没有 chart 字段时渲染空态 */
@@ -48,6 +52,14 @@ export type ChartViewProps = {
   saved?: boolean;
   /** 测试用：固定「今年」，让默认选中项可复现 */
   nowYear?: number;
+  /**
+   * 「同」检索到的一条**记录**被点了。
+   * ⚠ 拿到的是服务端原始记录，**转换（toHandoff）由页面做** ——
+   *   这个组件不该知道结果页/记录页的数据口径（见 SameBaziSheet 文件头）。
+   */
+  onOpenSameRecord?: (rec: any) => void;
+  /** 「同」检索到的一条**书签**被点了（`/books/bookmarks` 的 item，转换由页面做） */
+  onOpenSameBookmark?: (item: any) => void;
 };
 
 export default function ChartView({
@@ -57,6 +69,8 @@ export default function ChartView({
   onEmpty,
   saved = false,
   nowYear,
+  onOpenSameRecord,
+  onOpenSameBookmark,
 }: ChartViewProps) {
   const rpx = useRpx();
   const styles = useMemo(() => makeStyles(rpx), [rpx]);
@@ -74,7 +88,40 @@ export default function ChartView({
   /** 平气法那一份盘面：第一次切过去才现算（不在首屏付平气法的计算成本） */
   const [pingState, setPingState] = useState<any>(null);
 
+  /**
+   * ★ 2026-11-15：「同」= 按这张盘的八字去自己的记录 + 学堂书签里找同样的。
+   *
+   * ⚠⚠ 检索条件是**定气法**的四柱（下面 handler 里读 `state.pillars`），
+   *   **不是** `pingState.pillars` —— 用户原话「排盘结果页面的定气法的八字作为条件」。
+   *   哪怕页面上正显示着平气法，条件也不变（理由见 core/sameBazi.js 文件头）。
+   * ⚠ 结果不缓存：每次点都重新问一遍服务端 —— 记录可能刚存、书签可能刚加，
+   *   留一份旧结果比多一次往返更糟。
+   */
+  const [sameOn, setSameOn] = useState(false);
+  const [sameLoading, setSameLoading] = useState(false);
+  const [sameData, setSameData] = useState<any>(null);
+  const [sameChars, setSameChars] = useState<string[]>([]);
+
   const [state, setState] = useState<any>(() => M.buildChartData(record, nowYear));  /** 当前上下文（dk / di / lnIdx）—— 供 notes 变化时重算标记、以及长按取 meta 用 */
+
+  /**
+   * 点「同」：先开弹层（立刻给反馈，不等网络），再取条件并发检索。
+   * ⚠ 条件必须在**点击那一刻**从 `state.pillars` 里取（而不是从 sameChars 取）——
+   *   `sameChars` 只是上一次的展示残留，用它会让条件慢一拍。
+   */
+  const onSamePress = useCallback(() => {
+    setSameOn(true);
+    setSameLoading(true);
+    setSameData(null);
+    const chars = sameBazi.charsOf(state.pillars);
+    setSameChars(chars);
+    sameBazi.find(state.pillars).then((r: any) => {
+      setSameData(r);
+      setSameLoading(false);
+    });
+  }, [state.pillars]);
+
+  const closeSame = useCallback(() => setSameOn(false), []);
   /**
    * 行式表格数据：model.buildPillarRows 组装（纯数据、可断言），视图只画。
    * 四柱 + 选中运卡在**同一批行**里 —— 两块区域天然共行对齐。
@@ -409,6 +456,23 @@ export default function ChartView({
             </Text>
           </View>
         </View>
+
+        {/*
+          ★ 2026-11-15 用户：「在定气法平气法切换按钮下面增加一个按钮，名称为 同」。
+          ⚠ 右对齐 ⇒ 视觉上正好落在那个开关的正下方（开关在农历那行右端）。
+          ⚠ 只在这个卡片里多占一行，不动 page / card 的左右 padding ——
+            那笔「一屏 11 列」的宽度预算见文件头，动一下整盘就溢出。
+        */}
+        <View style={styles.sameRow}>
+          <Pressable
+            style={[styles.sameBtn, sameLoading ? styles.sameBtnOff : null]}
+            onPress={onSamePress}
+            disabled={sameLoading}
+            hitSlop={10}
+          >
+            <Text style={styles.sameBtnText}>同</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/*
@@ -453,6 +517,27 @@ export default function ChartView({
           onNoteLiuyue={noNote}
         />
       </View>
+
+      {/*
+        「同」检索结果弹层。
+        ⚠ 放在**两页之外**（不带 pianOff）：它是全屏 Modal，与「当前看哪一页」无关。
+        ⚠ 点某一条后先关弹层再跳 —— 否则从记录页重新进来时它会盖在新盘上面。
+      */}
+      <SameBaziSheet
+        visible={sameOn}
+        loading={sameLoading}
+        data={sameData}
+        chars={sameChars}
+        onClose={closeSame}
+        onOpenRecord={(rec: any) => {
+          setSameOn(false);
+          if (onOpenSameRecord) onOpenSameRecord(rec);
+        }}
+        onOpenBookmark={(item: any) => {
+          setSameOn(false);
+          if (onOpenSameBookmark) onOpenSameBookmark(item);
+        }}
+      />
     </View>
   );
 }
@@ -585,6 +670,33 @@ function makeStyles(rpx: (v: number) => number) {
       color: '#777777',
       fontSize: rpx(SIZES.headValSize),
       lineHeight: rpx(SIZES.headValSize * LINE_HEIGHTS.normal),
+    },
+
+    /* ===== 「同」按钮（2026-11-15）=====
+       ⚠ 右对齐 = 视觉上落在「定气法/平气法」开关的正下方（用户要求的相对位置）。
+       ⚠ 尺寸刻意做小（一颗胶囊的高度）：它是这一块里唯一的动作按钮，
+         不能大到抢走姓名的视觉重心。 */
+    sameRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      marginTop: rpx(14),
+    },
+    sameBtn: {
+      minWidth: rpx(74),
+      paddingVertical: rpx(8),
+      paddingHorizontal: rpx(20),
+      borderWidth: rpx(1),
+      borderColor: COLORS.gold,
+      borderRadius: rpx(RADII.btn),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    /** 检索进行中：置灰（避免连点发出多次请求）。⚠ 只改描边与文字，不改底色 —— 底色一暗就看着像禁用坏了 */
+    sameBtnOff: { borderColor: COLORS.border },
+    sameBtnText: {
+      fontSize: rpx(24),
+      lineHeight: rpx(24) * LINE_HEIGHTS.tight,
+      color: COLORS.gold,
     },
 
     // ===== 页：定气法 / 平气法 由开关切 =====

@@ -683,7 +683,16 @@ function Root() {
       {showResult ? (
         <View style={s.overlay}>
           <NavBar title={RESULT_TITLE} onBack={onBack} />
-          <Result entry={resultEntry} onGoPaipan={onGoPaipan} eaten={eaten} />
+          <Result
+            entry={resultEntry}
+            onGoPaipan={onGoPaipan}
+            /* 「同」检索点开一条记录 = 与记录页点开一条**同一个入口**
+               （chartBus.put + 计数器 +1 ⇒ 当前结果页原地换成那一份盘）。 */
+            onOpenRecord={onOpenRecord}
+            /* 「同」检索点开一条书签 = 学堂页点书签的同一个入口（阅读页推入层） */
+            onOpenBookmark={onOpenBookmark}
+            eaten={eaten}
+          />
         </View>
       ) : null}
 

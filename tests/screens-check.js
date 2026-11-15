@@ -5901,6 +5901,61 @@ console.log('\n--- require / import 路径审计 ---');
 }
 
 /* ================================================================ */
+/* 「同」按钮（2026-11-15）：结果页按**定气法**的四柱去检索记录 + 学堂书签
+ *
+ * ⚠⚠ 这一节盯的是**接线**而不是长相：按钮存在、点击真的发起检索、
+ *   条件取自 `state.pillars`（定气法）而**不是** `pingState.pillars`，
+ *   以及检索结果能点开（两条路各自复用已有入口）。
+ *   真正的检索逻辑在 core/sameBazi.js，那边由 tests/logic-check.js 断言。
+ */
+(function () {
+  const fs = require('fs');
+  function stripComments(src) {
+    return String(src).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  }
+  const read = (rel) => stripComments(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+
+  const chart = read('src/components/chart-view/ChartView.tsx');
+  const sheet = read('src/components/chart-view/SameBaziSheet.tsx');
+  const result = read('src/screens/result/Result.tsx');
+  const app = read('App.tsx');
+
+  ok(/<Text style=\{styles\.sameBtnText\}>同<\/Text>/.test(chart),
+    '结果页有「同」按钮（文案就是「同」）');
+  ok(chart.indexOf('import SameBaziSheet from') >= 0, 'ChartView 挂上了 SameBaziSheet');
+  ok(/sameBazi\.find\(state\.pillars\)/.test(chart),
+    '检索条件取 state.pillars（定气法那一份）');
+  /* ⚠ 反向：有人「顺手」改成平气法就会红 —— 用户明确要求条件永远是定气法 */
+  ok(!/sameBazi\.find\(\s*pingState/.test(chart), '⚠ 条件不许取自平气法');
+  ok(/sameBazi\.charsOf\(state\.pillars\)/.test(chart), '弹层标题下的条件也取自定气法');
+  ok(chart.indexOf('onOpenSameRecord') >= 0 && chart.indexOf('onOpenSameBookmark') >= 0,
+    'ChartView 把「点开」交回页面（自己不转换数据）');
+
+  ok(sheet.indexOf("require('../../core/sameBazi.js')") >= 0, '弹层用 core/sameBazi 的空态/计数文案');
+  ok(sheet.indexOf('onOpenRecord') >= 0 && sheet.indexOf('onOpenBookmark') >= 0,
+    '弹层两条路各自可点');
+  ok(sheet.indexOf('<Modal') >= 0, '弹层用 RN Modal（结果页是裸 ScrollView，absolute 遮罩会被裁）');
+
+  /* ⚠ 这两条用 indexOf + 距离，而不是正则：JSX 里那串 `={` / `=>` / `(rec: any)`
+     写成正则要转义一堆括号花括号，一旦转义错就变成「永远不匹配」的哑断言
+     —— 这个项目已经吃过「锚点写得太脆」的亏（见 CONTRACTS §二十三）。
+     距离限制（200 字符）足够表达「就在这个回调里」，又不至于跨到别的属性上。 */
+  function near(src, head, tail, span) {
+    const i = src.indexOf(head);
+    if (i < 0) return false;
+    const j = src.indexOf(tail, i);
+    return j > i && j - i < (span || 200);
+  }
+  ok(near(result, 'onOpenSameRecord', 'recordsModel.toHandoff('),
+    'Result 用 records/model.js 的 toHandoff 转记录（不另写一套）');
+  ok(near(result, 'onOpenSameBookmark', 'studyModel.bookmarkTarget('),
+    'Result 用 study/model.js 的 bookmarkTarget 转书签');
+
+  ok(/onOpenRecord=\{onOpenRecord\}/.test(app) && /onOpenBookmark=\{onOpenBookmark\}/.test(app),
+    'App 把两个既有入口透传给 Result');
+})();
+
+/* ================================================================ */
 
 console.log('\n通过 ' + pass + ' / 失败 ' + fail);
 if (fail) {

@@ -69,6 +69,13 @@ const requestsLib: any = require('../../core/requests.js');
    可点的那一份在修改态里 —— 「标签的修改不能分散」是用户的原话。 */
 const tagsLib: any = require('../../core/tags.js');
 const store: any = require('../../core/store/index.js');
+/* 「同」检索到的东西要能点开 —— 两处转换复用**各自页面**的既有口径：
+     · 记录 → records/model.js 的 toHandoff（轻记录 + tagId，走 chartBus 进本页）
+     · 书签 → study/model.js 的 bookmarkTarget（阅读页认的是 target，不是原始 item）
+   ⚠ 别在本页另写一套转换：那两个函数各自带着注释里写死的原因
+     （tagId 连键都不给、item 上还有不是定位信息的字段…），复制一遍就等于复制两份真相。 */
+const recordsModel: any = require('../records/model.js');
+const studyModel: any = require('../study/model.js');
 
 type Panel = {
   rec: any;
@@ -230,6 +237,13 @@ export default function Result({
   /** 空态里「去排盘」 */
   onGoPaipan,
   /**
+   * 「同」检索里点开一条**记录** → 交给 App 的同一个 onOpenRecord
+   * （它 chartBus.put + 计数器 +1 ⇒ 本页重排那一份盘，等于是**原地换盘**）。
+   */
+  onOpenRecord,
+  /** 「同」检索里点开一条**书签** → 交给 App 的 onOpenBookmark（阅读页推入层） */
+  onOpenBookmark,
+  /**
    * 键盘当前吃掉了多少高度（由根节点的 KeyboardAvoid 下发）。
    * ⚠⚠ 本页是**绝对定位的推入层**，不占 App 里那份 `s.stage` 的高度 ——
    *   所以避让得自己再减一次。别在页面里重新监听键盘：那是两份真相，
@@ -239,6 +253,8 @@ export default function Result({
 }: {
   entry: number;
   onGoPaipan: () => void;
+  onOpenRecord?: (handoff: any) => void;
+  onOpenBookmark?: (target: any) => void;
   eaten?: number;
 }) {
   const rpx = useRpx();
@@ -1891,6 +1907,17 @@ export default function Result({
               saved={panel.saved}
               onNote={onNoteEdit}
               onEmpty={onGoPaipan}
+              /* 「同」检索里点开一条记录：转成 handoff 交回 App ——
+                 与记录页点开一条走的是**同一条路**（chartBus + 计数器），
+                 所以本页会当场重排成那一条，不会叠出第二个结果页。 */
+              onOpenSameRecord={(rec: any) => {
+                const handoff = recordsModel.toHandoff(rec);
+                if (handoff && onOpenRecord) onOpenRecord(handoff);
+              }}
+              /* 「同」检索里点开一条书签：转成阅读页认的 target（学堂页同一套转换） */
+              onOpenSameBookmark={(item: any) => {
+                if (onOpenBookmark) onOpenBookmark(studyModel.bookmarkTarget(item));
+              }}
             />
           )}
 
