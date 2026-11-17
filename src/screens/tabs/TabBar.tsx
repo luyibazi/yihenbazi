@@ -70,7 +70,18 @@ export default function TabBar({
       paddingBottom: insets.bottom,
     },
     item: { flex: 1, alignItems: 'center', paddingTop: rpx(14), paddingBottom: rpx(8) },
-    icon: { width: rpx(64), height: rpx(64), resizeMode: 'contain' },
+    /* 图标盒：定尺寸，两张图层（灰/金）都 absolute 铺在它里面 —— 见 return 里的注释 */
+    iconBox: { width: rpx(64), height: rpx(64) },
+    iconLayer: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      width: rpx(64),
+      height: rpx(64),
+      resizeMode: 'contain',
+    },
+    /** 隐藏的那一层只动透明度：不 display:none，保证浏览器一开始就把 8 张图都拉齐 */
+    iconOff: { opacity: 0 },
     label: { fontSize: rpx(24), lineHeight: rpx(24 * 1.4), color: GRAY, marginTop: rpx(2) },
     labelOn: { color: GOLD },
   }), [rpx, insets.bottom]);
@@ -89,7 +100,31 @@ export default function TabBar({
             accessibilityState={{ selected: on }}
             accessibilityLabel={t.label}
           >
-            <Image source={on ? icons.iconActive : icons.icon} style={s.icon} />
+            {/*
+              ★ 2026-11-17 用户：「图标老是点击后消失，很久不出现」。
+              ⚠⚠ 病根是**换 source**：选中/未选中是两张不同的 PNG，
+                `source={on ? iconActive : icon}` 每次点 tab 都要重新加载一遍
+                —— 网页版下那是一次真的网络请求（还**必须**过隧道，连 304 再验证
+                也要往返一趟），隧道一慢图标就空白好几秒。
+              ⚠ 修法：两张图**都常驻**、absolute 叠在同一个盒子里，只用透明度切。
+                src 永远不变 ⇒ 不发任何请求、不重新解码，切换是纯样式变化，瞬时。
+                8 张 96×96 的小 PNG 常驻的内存代价可以忽略；代价换来的是首次进 app
+                就把全部图标加载齐（之后怎么切都不再有网络）。
+              ⚠ `fadeDuration={0}`：Android 的 Image 自带 150~300ms 淡入，
+                叠两层时首次显示会闪一下白，一并关掉。
+            */}
+            <View style={s.iconBox}>
+              <Image
+                source={icons.icon}
+                style={[s.iconLayer, on ? s.iconOff : null]}
+                fadeDuration={0}
+              />
+              <Image
+                source={icons.iconActive}
+                style={[s.iconLayer, on ? null : s.iconOff]}
+                fadeDuration={0}
+              />
+            </View>
             <Text style={[s.label, on ? s.labelOn : null]}>{t.label}</Text>
           </Pressable>
         );

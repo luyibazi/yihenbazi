@@ -4535,6 +4535,17 @@ console.log('\n--- 系统 chrome 契约：安全区 / 导航栏 / tab 栏 ---');
      'tab 图标盒 ≥ rpx(64)（32pt；旧值 rpx(52) 被真机反馈判为太小）');
   ok(/fontSize:\s*rpx\(24\)/.test(bar), 'tab 文字 ≥ rpx(24)（12pt；旧值 rpx(20) 太小）');
 
+  /* ③-2 图标不许换 source（2026-11-17 用户：「图标老是点击后消失，很久不出现」）：
+     ⚠ 病根是 `source={on ? iconActive : icon}` —— 选中/未选中是两张 PNG，
+       每次点 tab 都重新加载；网页版下那是一次真网络请求（必须过隧道，
+       304 再验证也要往返），隧道一慢图标就空白几秒。
+     ⚠ 修法：两张图都常驻、透明度切 —— 所以「灰图」「金图」必须**同时**渲染。 */
+  ok(/source=\{icons\.icon\}/.test(bar) && /source=\{icons\.iconActive\}/.test(bar),
+     'tab 图标两张 PNG 都常驻渲染（换 source 会重新加载，网页版图标会空白几秒）');
+  ok(bar.indexOf('source={on ?') < 0, '⚠ 不许按选中态换 source（图标消失的病根）');
+  ok(/iconOff[^}]*opacity:\s*0/.test(bar),
+     '隐藏层用 opacity:0（display:none 会取消图片加载，预载就落空了）');
+
   /* ④ 结果页底部留白含安全区（它盖满全屏，没有 tab 栏兜底） */
   ok(/pagePadBottom\)\s*\+\s*insets\.bottom/.test(result),
      '结果页纵向留白含 insets.bottom（最后一颗按钮不许贴屏底）');

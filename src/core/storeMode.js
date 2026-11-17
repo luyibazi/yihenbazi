@@ -43,7 +43,7 @@ const MODE = 'local';
  * ⚠ 真正的连接参数在 core/localsdk.js 的 CONFIG.base ——
  *   那层是最底层，不该反过来依赖这份业务配置。这里只给设置页一个状态位/展示用。
  */
-const LOCAL_URL = 'https://marc-grant-insulation-medline.trycloudflare.com';
+const LOCAL_URL = 'https://deals-template-symptoms-usage.trycloudflare.com';
 
 /**
  * 运行时覆盖的服务器地址 —— 设置页里填的那一条（存本机）。
